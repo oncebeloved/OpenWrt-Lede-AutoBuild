@@ -1,0 +1,135 @@
+name: NEWIFI-D2-CONFIG
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event.repository.owner.id == github.event.sender.id
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: 用户空间清理准备上传大文件
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi `docker images -q`
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /usr/local/lib/android
+          sudo apt -yqq purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* dotnet* moby* snapd* || true
+
+      - name: 初始化编译环境
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt update -yqq
+          #sudo apt full-upgrade -yqq
+          sudo apt install -yqq ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+          sudo apt -y autoremove --purge
+          sudo apt clean
+
+      - name: 下载 LEDE 源码
+        run: |
+          #获取最新源代码
+          git clone https://github.com/coolsnowwolf/lede.git
+          mv ./lede/* ./
+
+          #❤获取分支源代码
+          #git clone -b lede-17.01 https://github.com/coolsnowwolf/openwrt.git
+          #mv ./openwrt/* ./
+
+          #获取发行源代码
+          #wget "https://github.com/coolsnowwolf/lede/archive/refs/tags/20221001.zip"
+          #unzip -qq 20221001.zip
+          #mv ./lede-20221001/* ./
+
+      - name: 安装第三方插件
+        run: |
+          cd package/lean
+          rm -rf luci-theme-argon
+          git clone -b 18.06 https://github.com/jerrykuku/luci-theme-argon.git
+      - name: 更新 FEEDS
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 定制编译配置文件
+        run: |
+          #修改默认主题
+          sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
+          #修改默认网关
+          #sed -i 's/192.168.1.1/192.168.1.8/g' package/base-files/files/bin/config_generate
+          #默认开启wifi
+          sed -i 's/set wireless.radio${devidx}.disabled=1/set wireless.radio${devidx}.disabled=0/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
+
+          #下载预配置文件
+          wget "https://raw.githubusercontent.com/oncebeloved/OpenWrt-lEDE-AutoBuild/master/NEWIFI-D2.config" -O .config
+
+      - name: 下载依赖包源代码
+        run: |
+          make defconfig
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: 打包上传编译环境(DL)
+        uses: actions/upload-artifact@master
+        with:
+          name: OpenWrt-newifi-dl.zip
+          path: ./dl
+
+      - name: 打包并上传到阿里云盘(DL)
+        run: |
+          wget "https://github.com/tickstep/aliyunpan/releases/download/v0.2.6/aliyunpan-v0.2.6-linux-amd64.zip"
+          unzip -d ~/ aliyunpan-v0.2.6-linux-amd64.zip
+          ~/aliyunpan-v0.2.6-linux-amd64/aliyunpan login -RefreshToken=${{ secrets.ALIYUN_TOKEN }}
+
+          sleep 10
+          zip -q -r ~/OpenWrt-newifi-dl.zip ./dl
+          ~/aliyunpan-v0.2.6-linux-amd64/aliyunpan u ~/OpenWrt-newifi-dl.zip /OpenWrt
+          rm ~/OpenWrt-newifi-dl.zip
+
+      - name: 正式开始编译固件
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          echo -e "$(nproc) thread build."
+          make -j$(nproc) V=s
+
+      - name: 打包上传编译好的(Bin)
+        uses: actions/upload-artifact@master
+        with:
+          name: OpenWrt-newifi-bin.zip
+          path: bin/targets/
+
+      - name: 打包并上传到阿里云盘(Bin)
+        run: |
+          zip -q -r ~/OpenWrt-newifi-bin.zip ./bin/targets
+          ~/aliyunpan-v0.2.6-linux-amd64/aliyunpan u ~/OpenWrt-newifi-bin.zip /OpenWrt
+          rm ~/OpenWrt-newifi-bin.zip
+
+      - name: 用户空间清理准备上传大文件
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt -yqq purge ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential ccache cmake cpio device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib  gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim xmlto xxd zlib1g-dev
+          sudo apt -y autoremove --purge
+          sudo apt clean
+
+      - name: 打包并上传到阿里云盘(Build)
+        run: |
+          zip -q -r ~/OpenWrt-newifi-build.zip ./
+          sleep 10
+          ~/aliyunpan-v0.2.6-linux-amd64/aliyunpan u ~/OpenWrt-newifi-build.zip /OpenWrt
+
+      - name: 清理旧的workflow
+        uses: GitRML/delete-workflow-runs@main
+        with:
+           retain_days: 180
+           keep_minimum_runs: 10

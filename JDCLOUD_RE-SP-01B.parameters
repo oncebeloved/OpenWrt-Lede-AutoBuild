@@ -1,0 +1,4 @@
+Model: JDCloud RE-SP-01B
+SoC: MT7621AT RAM:512MB SPI-FLASH:32MB Storage:64GB EMMC(on board)
+Wi-Fi Chips: MT7603EN(2.4G) MT7615N(5G)
+I/O Ports: USB2.0 x1 (need kmod-usb3), LAN x2, WAN x1

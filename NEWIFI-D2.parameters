@@ -1,0 +1,14 @@
+SOC				MT7621A
+2.4G无线芯片		MT7603EN
+5G 无线芯片		MT7612EN
+5G 功放芯片		SKY85717-21
+RAM内存			512MB
+ROM闪存			32MB
+2.4G 最大速率	300Mbps
+5G最大速率		867Mbps
+WLAN口速率		1Gbps
+LAN口速率		1Gbps
+LAN口数量		4
+天线类型			外置不可拆卸4根
+天线增益			2.4G天线增益5dBi/5G天线增益6dBi
+USB 3.0			1
